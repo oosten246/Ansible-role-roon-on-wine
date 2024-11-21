@@ -1,0 +1,51 @@
+---
+- name: Check if Roon is installed
+  ansible.builtin.stat:
+    path: "/home/{{ ansible_env.USER }}/my_roon_instance/drive_c/users/{{ ansible_env.USER }}/AppData/Local/Roon/Application/Roon.exe"
+  register: roon
+
+- name: Install Roon
+  when: roon.stat.isreg is not defined or roon_on_wine_reinstall
+  block:
+    - name: Remove Roon
+      when: roon_on_wine_reinstall
+      ansible.builtin.file:
+        path: "/home/{{ ansible_env.USER }}/{{ item }}"
+        state: absent
+      loop:
+        - "my_roon_instance/"
+        - "start_my_roon_instance.sh"
+        - ".local/share/applications/roon-on-wine.desktop"
+
+    - name: Set temporary directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: _roon_on_wine
+      register: temp_dir
+
+    - name: Checkout RoPieee's roon-on-wine github repo
+      ansible.builtin.git:
+        repo: https://github.com/RoPieee/roon-on-wine.git
+        dest: "{{ temp_dir.path }}"
+        version: master
+
+    - name: Make install.sh executable
+      ansible.builtin.file:
+        path: "{{ temp_dir.path }}/install.sh"
+        mode: '0755'
+
+    - name: Show install.sh
+      ansible.builtin.debug:
+        msg: "{{ lookup('file', '{{ temp_dir.path }}/install.sh') }}"
+        verbosity: 2
+
+    - name: Run install.sh
+      ansible.builtin.command: ./install.sh
+      args:
+        chdir: "{{ temp_dir.path }}"
+        creates: "/home/{{ ansible_env.USER }}/my_roon_instance/drive_c/users/{{ ansible_env.USER }}/AppData/Local/Roon/Application/Roon.exe"
+
+    - name: Remove temp directory
+      ansible.builtin.file:
+        path: "{{ temp_dir.path }}"
+        state: absent
